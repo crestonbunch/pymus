@@ -218,11 +218,6 @@ class TestEffects(unittest.TestCase):
         all_fft = np.abs(self.wf.fft)
         band_fft = np.abs(bandpassed.fft)
 
-        from matplotlib import pyplot as plt
-        plt.plot(bins, all_fft)
-        plt.plot(bins, band_fft)
-        plt.show()
-
         # tolerance threshold for verifying bandpass filter results
         tol = 50
 
