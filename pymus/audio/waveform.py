@@ -1,4 +1,13 @@
 import numpy as np
+from fractions import Fraction
+
+def waveform_effect(fn, name=None):
+    """Decorator for adding effects to Waveform objects."""
+    if name is None:
+        name = fn.__name__
+
+    setattr(Waveform, name, fn)
+    return fn
 
 class Waveform:
     """Represents a single-channel waveform of a sound sample."""
@@ -44,6 +53,10 @@ class Waveform:
         """Apply an exponent to every sample."""
         return self._spawn(np.clip(self._samples ** num, -1.0, 1.0))
 
+    def __str__(self):
+        """Present this waveform in a human-readable string."""
+        return str(self._samples)
+
     def _spawn(self, data):
         """Create a new waveform with the same metadata as this waveform."""
         wf = Waveform(len(data), self.sample_rate)
@@ -51,14 +64,19 @@ class Waveform:
         return wf
 
     @property
-    def rms(self):
-        """Calculate the root mean squared."""
-        return np.sqrt(sum(self ** 2 / len(self)))
+    def mean(self):
+        """Calculate the statistical mean of all amplitudes."""
+        return np.mean(self._samples)
 
     @property
-    def dBFS(self):
-        """Calculate the decibels relative to full scale."""
-        return 10 * np.log(self.rms)
+    def std(self):
+        """Calculate the standard deviation from the mean for all amplitudes."""
+        return np.std(self._samples)
+
+    @property
+    def rms(self):
+        """Calculate the root mean squared."""
+        return np.sqrt(np.sum([x**2 for x in self._samples]) / len(self))
 
     @property
     def fft(self):
@@ -66,34 +84,24 @@ class Waveform:
         return np.fft.fft(self._samples)
 
     def resample(self, rate):
-        """Resample the waveform to a new rate."""
-        pass # not implemented yet
+        """Resample the waveform to a new rate.
 
-    def upsample(self, rate):
-        """Upsample the waveform to a new rate."""
-        if (rate < self.sample_rate):
-            raise ValueError("Rate is less than the current sampling rate.")
-
-        from fractions import Fraction
+        Uses the Wittaker-Shannon interpolation formula.
+        TODO: this is really slow, surely there's a better way
+        """
 
         ratio = Fraction(rate, self.sample_rate)
-        new_samples = self._samples
-        # insert L zeros at every M index
-        for i in range(1,ratio.numerator):
-            stop = len(new_samples)
-            skip = i;
-            indeces = np.arange(1, stop, skip)
-            new_samples = np.insert(new_samples, indeces, 0)
+        # sampling period
+        T = 1 / self.sample_rate
+        # length of the time axis
+        l = self.sample_rate / len(self)
+        new_samples = []
+        for t in np.linspace(0,round(l),rate):
+            s = [x * np.sinc((t - n*T) / T) for n,x in enumerate(self._samples)]
+            x = sum(s)
+            new_samples.append(x)
 
-        return new_samples
-        """
-        sinc = np.sinc(np.arange(-5,5))
-        win_sinc = sinc * np.hanning(len(sinc))
-        return np.convolve(new_samples, win_sinc)
-        """
-
-if __name__ == '__main__':
-    """Testing."""
-    wf = Waveform(100, 2)
-    wf[0:100] = np.sin(np.linspace(0, 2 * np.pi, 100))
-    print(wf.upsample(4))
+        # put the samples in a new waveform
+        out = self._spawn(new_samples)
+        out.sample_rate = rate
+        return out
